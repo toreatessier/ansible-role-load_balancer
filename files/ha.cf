@@ -1,0 +1,13 @@
+mcast enp0s3 239.0.0.10 694 1 0
+ 
+warntime 4
+deadtime 5
+initdead 15
+keepalive 2
+ 
+#Re-balance les services sur le lb primaire quand il revient en ligne
+auto_failback off
+ 
+#Serveurs du cluster
+node haproxy
+node haproxy2

@@ -1,0 +1,136 @@
+---
+- name: Create 'admin' user
+  user:
+    name: admin
+    password: $6$1a2zsalt$/EtVX8A9SOx/8pZJW0eqvgPCEzuKYoKf4AK.Q8IljcNVbmp0H6fIF1z6tZqCUx7jkP9TvNvhTKvfrdLFU/17G.
+    shell: /bin/bash
+
+- name: Set hostname to 'haproxy' in /etc/hosts
+  copy:
+    src: "{{ role_path }}/files/hosts"
+    dest: /etc/hosts
+
+- name: Set hostname to 'haproxy' in hostnamectl on main node
+  command: hostnamectl set-hostname haproxy
+  when: haproxy_node_no==1
+  
+- name: Set hostname to 'haproxy2' in hostnamectl on passive node
+  command: hostnamectl set-hostname haproxy2
+  when: haproxy_node_no==2
+
+- name: Install HAProxy load balancer
+  apt:
+    name: haproxy
+    state: present
+
+- name: Copy haproxy.cfg to /etc/haproxy/haproxy.cfg
+  copy:
+    src: "{{ role_path }}/files/haproxy.cfg"
+    dest: /etc/haproxy/haproxy.cfg
+
+- name: Restart haproxy and networking services
+  systemd:
+    name: haproxy
+    state: restarted
+
+- name: Install Zabbix agent
+  apt:
+    name: zabbix-agent
+    state: present
+
+- name: Configure Zabbix agent
+  copy:
+    src: "{{ role_path }}/files/zabbix_agentd.conf"
+    dest: /etc/zabbix/zabbix_agentd.conf
+
+- name: Restart zabbix-agent service
+  systemd:
+    name: zabbix-agent
+    state: restarted
+
+### ---------------------- Rudder agent installation ---------------------- ###
+- name: Install syslog-ng
+  apt:
+    name: syslog-ng
+    state: present
+
+- name: Get Rudder apt public key 
+  apt_key:
+    url: "{{ rudder_pubkey_url }}"
+    state: present
+
+- name: Add Rudder's repository
+  apt_repository:
+    repo: "{{ rudder_repo }}"
+    state: present
+    update_cache: yes #apt-get update
+
+# apt-get update
+- name: Update cache
+  apt:
+    update_cache: yes
+
+- name: Install Rudder agent
+  apt: 
+    name: rudder-agent
+    state: present
+
+- name: Configure Rudder agent
+  shell: "echo '{{ rudder_ip }}' > /var/rudder/cfengine-community/policy_server.dat"
+  args:
+    executable: /bin/bash
+
+- name: Start Rudder agent
+  shell: rudder agent start
+  args:
+    executable: /bin/bash
+### ----------------------------------------------------------------------- ###
+
+- name: Install heartbeat
+  apt:
+    name: heartbeat
+    state: present
+
+- name: Copy ha.cf
+  copy:
+    src: "{{ role_path }}/files/ha.cf"
+    dest: /etc/ha.d/
+
+- name: Copy haresources
+  copy:
+    src: "{{ role_path }}/files/haresources"
+    dest: /etc/ha.d/
+
+- name: Copy autkeys
+  copy:
+    src: "{{ role_path }}/files/authkeys"
+    dest: /etc/ha.d/
+    mode: 0600
+
+- name: Install innserv
+  apt:
+    name: insserv
+    state: present
+
+- name: Disable haproxy on startup
+  command: insserv -r haproxy
+
+- name: Stop haproxy 
+  systemd:
+    name: haproxy
+    state: stopped
+
+- name: Start heartbeat on main node
+  systemd:
+    name: heartbeat
+    state: started
+  when: haproxy_node_no==1
+
+- name: sleep for 10 seconds and continue with play
+  wait_for: timeout=10
+
+- name: Start heartbeat on passive node
+  systemd:
+    name: heartbeat
+    state: started
+  when: haproxy_node_no==1

@@ -1,0 +1,1 @@
+haproxy IPaddr::192.168.20.22/26/enp0s3 IPaddr::192.168.20.23/26/enp0s8 haproxy
